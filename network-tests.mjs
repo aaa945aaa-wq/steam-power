@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {jsonGet} from './lib/steam-metadata.mjs';
+test('Temporary upstream error retries once and recovers',async()=>{let n=0;const d=await jsonGet('https://store.steampowered.com/search/results/',async()=>++n===1?new Response('',{status:503}):Response.json({success:1}));assert.equal(n,2);assert.equal(d.success,1);});
+test('Rate limit does not create a retry burst',async()=>{let n=0;await assert.rejects(()=>jsonGet('https://store.steampowered.com/search/results/',async()=>{n++;return new Response('',{status:429});}),e=>e.code==='rate_limit');assert.equal(n,1);});
+test('Invalid JSON is distinguished from network failure',async()=>{await assert.rejects(()=>jsonGet('https://store.steampowered.com/search/results/',async()=>new Response('<html>unavailable</html>')),e=>e.code==='format');});

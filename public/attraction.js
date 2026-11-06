@@ -1,0 +1,9 @@
+// Separate presentation evidence from mechanics; unknown is never neutral.
+export const PRESENTATION={fantasy:'奇幻',darkFantasy:'暗黑奇幻',scifi:'科幻',cyberpunk:'賽博龐克',horror:'恐怖',historical:'歷史',postapocalyptic:'末日',mythology:'神話',space:'太空',pixel:'像素美術',anime:'動漫風格',cute:'可愛風格',handdrawn:'手繪',minimalist:'極簡',dark:'暗黑風格'};
+export function presentationOf(g){return [...new Set(g?.facets?.presentation||[])].filter(t=>PRESENTATION[t]);}
+export function attraction(answers,catalog,library){const samples={},evidence={},weights={};for(const g of library){if(!(g.minutes>0))continue;const meta=catalog.find(c=>c.appid===g.appid);for(const t of presentationOf(meta)){(samples[t]??=[]).push(g);}}
+ for(const [t,gs] of Object.entries(samples)){const positive=gs.filter(g=>(answers[g.appid]?.reasons||[]).includes('style')).length;const negative=gs.filter(g=>(answers[g.appid]?.reasons||[]).includes('styleBad')).length;weights[t]=Math.max(-.6,Math.min(.6,.12*Math.sqrt(gs.length)+.15*positive-.3*negative));evidence[t]=gs.map(g=>g.name);}
+ return {weights,evidence,samples};}
+export const LEVELS=['××','×','－','○','○○'];
+export function preferenceLevel(value,known,kind='mechanic',support=0){if(!known||!Number.isFinite(value))return null;const strong=kind==='presentation'?.35:1;const neutral=kind==='presentation'?.08:.1;const level=value<=-strong?-2:value< -neutral?-1:value>=strong&&(kind!=='presentation'||support>=3)?2:value>neutral?1:0;return {level,symbol:LEVELS[level+2]};}
+export function preferenceRows(game,p,labels){const rows=[];for(const t of game.features||[]){const k=preferenceLevel(p.weights[t],Object.hasOwn(p.weights,t));if(k)rows.push({key:t,label:labels[t]||t,kind:'mechanic',...k});}for(const t of presentationOf(game)){const k=preferenceLevel(p.attraction.weights[t],Object.hasOwn(p.attraction.weights,t),'presentation',p.attraction.samples[t]?.length||0);if(k)rows.push({key:t,label:PRESENTATION[t],kind:'presentation',...k});}return rows;}
