@@ -51,16 +51,16 @@ test('channelStats aggregates acceptance per channel and tier, and tolerates old
     8: {choice: 'interested', sources: ['__proto__:x', 42, 'broad:BUILD']},
   };
   const s = channelStats(fb);
-  assert.equal(s.total.shown, 6);
-  assert.equal(s.byChannel.build.shown, 2);
+  assert.equal(s.total.judged, 6);
+  assert.equal(s.byChannel.build.judged, 2);
   assert.equal(s.byChannel.build.interested, 1);
   assert.equal(s.byChannel.build.saturated, 1);
   assert.equal(s.byChannel.build.rate, 0.5);
-  assert.equal(s.byChannel.strategy.shown, 3);
-  assert.equal(s.byChannel.unknown.shown, 2);
-  assert.equal(s.byTier.broad.shown, 3);
+  assert.equal(s.byChannel.strategy.judged, 3);
+  assert.equal(s.byChannel.unknown.judged, 2);
+  assert.equal(s.byTier.broad.judged, 3);
   assert.equal(s.byTier.extended.interested, 1);
-  assert.deepEqual(channelStats({}).total, {shown: 0, interested: 0, notForMe: 0, known: 0, saturated: 0, rate: null});
+  assert.deepEqual(channelStats({}).total, {judged: 0, interested: 0, notForMe: 0, known: 0, saturated: 0, rate: null});
 });
 
 function harness() {
@@ -84,4 +84,44 @@ test('Client records sources and list position with each feedback; junk sources 
   h.run("candidateFeedback(4,'interested')");
   assert.deepEqual(h.saved(4).sources, []);
   assert.equal(h.saved(4).rank, 0);
+});
+
+test('An AND query is attributed to every channel whose tag it requires, not only the first', () => {
+  const plan = makePlan(answers, [], 6, {}, cat);
+  assert.ok(plan.choices.length >= 2);
+  const qs = tierQueries(plan, {});
+  const byFeature = Object.fromEntries(plan.choices.map(c => [c.feature, c.id]));
+  for (const q of qs) {
+    assert.ok(Array.isArray(q.channels) && q.channels.length >= 1);
+    assert.equal(q.channels[0], q.channel);
+    for (const ch of q.channels) assert.ok(q.tags.includes(byFeature[ch]), `${q.tier}:${ch} must be required by tags ${q.tags}`);
+    for (const t of q.tags) {
+      const owner = plan.choices.find(c => c.id === t);
+      if (owner) assert.ok(q.channels.includes(owner.feature), `tag ${t} (${owner.feature}) must be attributed`);
+    }
+  }
+  const ext = qs.filter(q => q.tier === 'extended');
+  assert.ok(ext.some(q => q.channels.length === 2));
+});
+
+test('discover(): a candidate found by a pair query carries both channels as sources', async () => {
+  const rows = `<a data-ds-appid="104" data-ds-tagids="[32322,9]"><span class="title">Game 104</span></a>`;
+  const mock = async url => {
+    const u = new URL(url);
+    if (u.pathname.includes('/appreviews/')) return Response.json({success: 1, query_summary: {total_reviews: 1000, total_positive: 900}});
+    if (u.pathname.includes('/search/')) return Response.json({success: 1, results_html: rows});
+    const id = +u.searchParams.get('appids');
+    return Response.json({[id]: {success: true, data: {type: 'game', name: `Game ${id}`, release_date: {coming_soon: false, date: '2025'}, is_free: true, short_description: 'x'}}});
+  };
+  const plan = makePlan(answers, [], 6, {}, cat);
+  const pair = tierQueries(plan, {}).find(q => q.tier === 'extended' && q.channels.length === 2);
+  const r = await discover({owned: [], answers}, mock);
+  for (const ch of pair.channels) assert.ok(r.games[0].sources.includes(`extended:${ch}`), `missing extended:${ch}`);
+});
+
+test('channelStats declares its denominator: judged candidates only', () => {
+  const s = channelStats({1: {choice: 'interested', sources: ['broad:build']}});
+  assert.equal(s.basis, 'judged-only');
+  assert.equal(s.total.judged, 1);
+  assert.equal(Object.hasOwn(s.total, 'shown'), false);
 });
