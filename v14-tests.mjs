@@ -49,7 +49,8 @@ const mock=async url=>{
 };
 test('full discovery excludes insufficient/unknown reviews and accepts grace-cache valid counts',async()=>{
  const result=await discover({owned:[],answers},mock);
- assert.deepEqual(result.games.map(g=>g.appid),[803,804,805]);
+ // Membership is the contract here; order now also reflects review quality (same 20% rate, different sample sizes).
+ assert.deepEqual(result.games.map(g=>g.appid).sort((a,b)=>a-b),[803,804,805]);
  assert.ok(result.warnings.some(w=>w.includes('未滿 20')));assert.ok(result.warnings.some(w=>w.includes('無法確認')));
  const excluded=await discover({owned:[803],answers,feedback:{804:{choice:'known'}}},mock);
  assert.deepEqual(excluded.games.map(g=>g.appid),[805]);
