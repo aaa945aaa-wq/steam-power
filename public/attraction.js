@@ -1,8 +1,12 @@
 // Separate presentation evidence from mechanics; unknown is never neutral.
 export const PRESENTATION={fantasy:'奇幻',darkFantasy:'暗黑奇幻',scifi:'科幻',cyberpunk:'賽博龐克',horror:'恐怖',historical:'歷史',postapocalyptic:'末日',mythology:'神話',space:'太空',pixel:'像素美術',anime:'動漫風格',cute:'可愛風格',handdrawn:'手繪',minimalist:'極簡',dark:'暗黑風格'};
 export function presentationOf(g){return [...new Set(g?.facets?.presentation||[])].filter(t=>PRESENTATION[t]);}
-export function attraction(answers,catalog,library){const samples={},evidence={},weights={};for(const g of library){if(!(g.minutes>0))continue;const meta=catalog.find(c=>c.appid===g.appid);for(const t of presentationOf(meta)){(samples[t]??=[]).push(g);}}
+// A candidate rejected for style is a weak, split-across-its-presentation-tags correction. It never touches mechanics.
+export const STYLE_REJECT=.15;
+export function attraction(answers,catalog,library,feedback={}){const samples={},evidence={},weights={};for(const g of library){if(!(g.minutes>0))continue;const meta=catalog.find(c=>c.appid===g.appid);for(const t of presentationOf(meta)){(samples[t]??=[]).push(g);}}
  for(const [t,gs] of Object.entries(samples)){const positive=gs.filter(g=>(answers[g.appid]?.reasons||[]).includes('style')).length;const negative=gs.filter(g=>(answers[g.appid]?.reasons||[]).includes('styleBad')).length;weights[t]=Math.max(-.6,Math.min(.6,.12*Math.sqrt(gs.length)+.15*positive-.3*negative));evidence[t]=gs.map(g=>g.name);}
+ const rejected={};for(const f of Object.values(feedback||{}).slice(-200)){if(f?.choice!=='not_for_me'||f.reason!=='style')continue;const ts=[...new Set((Array.isArray(f.presentation)?f.presentation:[]).filter(t=>typeof t==='string'&&Object.hasOwn(PRESENTATION,t)))].slice(0,6);for(const t of ts)(rejected[t]??=[]).push(STYLE_REJECT/ts.length);}
+ for(const [t,shares] of Object.entries(rejected)){weights[t]=Math.max(-.6,Math.min(.6,(weights[t]??0)-shares.reduce((s,x)=>s+x,0)));(evidence[t]??=[]).push(...shares.map(()=>'候選作品回饋：風格不合'));}
  return {weights,evidence,samples};}
 export const LEVELS=['××','×','－','○','○○'];
 export function preferenceLevel(value,known,kind='mechanic',support=0){if(!known||!Number.isFinite(value))return null;const strong=kind==='presentation'?.35:1;const neutral=kind==='presentation'?.08:.1;const level=value<=-strong?-2:value< -neutral?-1:value>=strong&&(kind!=='presentation'||support>=3)?2:value>neutral?1:0;return {level,symbol:LEVELS[level+2]};}

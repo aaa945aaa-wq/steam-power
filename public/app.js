@@ -94,11 +94,21 @@ function renderDiscovery(d){
 }
 function candidateFeedback(id,choice){
  const g=shownDiscovery?.games.find(g=>g.appid===id);if(!g)return;
- state.feedback??={};state.feedback[id]={choice,features:g.matched||[],name:g.name,prediction:{score:g.score,confidence:g.confidence},updatedAt:new Date().toISOString()};const persisted=save();
+ state.feedback??={};state.feedback[id]={choice,features:g.matched||[],presentation:(g.facets?.presentation||[]).filter(t=>Object.hasOwn(PRESENTATION,t)).slice(0,6),sources:(g.sources||[]).filter(x=>typeof x==='string'&&/^(broad|extended|deep):[a-z]{2,20}$/.test(x)).slice(0,12),rank:Math.max(0,(shownDiscovery.games||[]).findIndex(x=>x.appid===id)),shadowScore:Number.isFinite(g.shadowScore)?g.shadowScore:null,tagIds:(g.tagIds||[]).filter(Number.isSafeInteger).slice(0,40),name:g.name,prediction:{score:g.score,confidence:g.confidence},updatedAt:new Date().toISOString()};const persisted=save();
  const box=document.querySelector(`[data-feedback-box="${id}"]`);box.innerHTML=`<p class="small text-green">${persisted?'已記錄':'已在此頁記錄，尚未保存；請匯出備份'}。重新搜尋時會排除此作品。</p>`;
- if(choice==='not_for_me'&&g.confidence==='中等'){
- box.innerHTML+='<p class="small">原本預期你可能有興趣，哪裡不合？（可略過）</p><div class="chips">'+Object.entries({content:'玩法',style:'美術／題材',era:'年代',price:'價格',other:'其他',skip:'略過'}).map(([k,v])=>`<button data-follow="${k}">${v}</button>`).join('')+'</div>';
- box.querySelectorAll('[data-follow]').forEach(b=>b.onclick=()=>{state.feedback[id].reason=b.dataset.follow;const ok=save();box.innerHTML=`<p class="small text-green">${ok?'已記錄':'目前只記錄在此頁，請匯出備份'}，下次搜尋會使用可對應的修正。價格、年代與風格暫不泛化成玩法扣分。</p>`;});
+ if(choice==='not_for_me'){
+  const ASK={content:'玩法／系統',style:'美術／題材',price:'價格',era:'年代／畫面老舊',saturated:'同類型玩太多了',other:'其他',skip:'略過'};
+  const notes={style:'風格不合只會調整你的風格偏好，不扣玩法分。',price:'價格不影響玩法偏好；已記錄當時標價，尚未用於推薦。',era:'已記錄發售年份；年代偏好尚未用於推薦。',saturated:'已記錄；目前尚未用於推薦，也不扣玩法分。',other:'已記錄；不影響推薦。',skip:'已略過。'};
+  const done=text=>{const ok=save();box.innerHTML=`<p class="small text-green">${ok?'已記錄':'目前只記錄在此頁，請匯出備份'}。${text}</p>`;};
+  box.innerHTML+='<p class="small">哪裡不合？（可略過）</p><div class="chips">'+Object.entries(ASK).map(([k,v])=>`<button data-follow="${k}">${v}</button>`).join('')+'</div>';
+  box.querySelectorAll('[data-follow]').forEach(b=>b.onclick=()=>{
+   const k=b.dataset.follow,f=state.feedback[id];f.reason=k;
+   if(k==='era'){const y=Number((String(g.release||'').match(/\d{4}/)||[])[0]);if(Number.isSafeInteger(y))f.releaseYear=y;}
+   if(k==='price'&&typeof g.price==='string')f.price=g.price.slice(0,40);
+   const tags=(g.features||[]).filter(t=>Object.hasOwn(FEATURE_LABELS,t));
+   if(k==='content'&&tags.length){save();box.innerHTML='<p class="small">是哪一部分不合？只會調整你選的玩法。</p><div class="chips">'+tags.map(t=>`<button data-aspect="${t}">${esc(FEATURE_LABELS[t])}</button>`).join('')+'<button data-aspect="">說不準</button></div>';
+    box.querySelectorAll('[data-aspect]').forEach(x=>x.onclick=()=>{if(x.dataset.aspect)f.aspect=x.dataset.aspect;done(x.dataset.aspect?`只會調整「${esc(FEATURE_LABELS[x.dataset.aspect])}」。`:'未指定哪一部分，沿用原本的玩法弱修正。');});return;}
+   done(k==='content'?'沿用原本的玩法弱修正。':notes[k]);});
  }
 }
 function exportData(){const blob=new Blob([JSON.stringify({kind:'steam-power-backup',version:5,exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'}),u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download='steam-power-progress.json';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000);toast('進度已匯出，可由首頁重新匯入');}
