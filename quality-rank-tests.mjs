@@ -65,7 +65,7 @@ test('discover(): identical fit, review quality decides the order and is exposed
   const pos = { 104: 300, 105: 950, 106: 700, 107: 500 };
   const mock = async url => {
     const u = new URL(url);
-    if (u.pathname.includes('/appreviews/')) { const id = +u.pathname.split('/').pop(); return Response.json({ success: 1, query_summary: { total_reviews: 1000, total_positive: pos[id] } }); }
+    if (u.pathname.includes('/GetAppReviews/')) { const id = +JSON.parse(u.searchParams.get('input_json')).appid; return Response.json({ response:{query_summary:{ total_reviews: 1000, total_positive: pos[id] }} }); }
     if (u.pathname.includes('/search/')) return Response.json({ success: 1, results_html: rows });
     const id = +u.searchParams.get('appids');
     return Response.json({ [id]: { success: true, data: { type: 'game', name: `Game ${id}`, release_date: { coming_soon: false, date: '2025' }, is_free: true, short_description: 'x' } } });

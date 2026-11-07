@@ -25,7 +25,7 @@ test('discover(): candidates carry tier:channel sources; behavior of the list is
   const rows = [104, 105].map(id => `<a data-ds-appid="${id}" data-ds-tagids="[32322,9]"><span class="title">Game ${id}</span></a>`).join('');
   const mock = async url => {
     const u = new URL(url);
-    if (u.pathname.includes('/appreviews/')) return Response.json({success: 1, query_summary: {total_reviews: 1000, total_positive: 900}});
+    if (u.pathname.includes('/GetAppReviews/')) return Response.json({response:{query_summary:{total_reviews: 1000, total_positive: 900}}});
     if (u.pathname.includes('/search/')) return Response.json({success: 1, results_html: rows});
     const id = +u.searchParams.get('appids');
     return Response.json({[id]: {success: true, data: {type: 'game', name: `Game ${id}`, release_date: {coming_soon: false, date: '2025'}, is_free: true, short_description: 'x'}}});
@@ -108,7 +108,7 @@ test('discover(): a candidate found by a pair query carries both channels as sou
   const rows = `<a data-ds-appid="104" data-ds-tagids="[32322,9]"><span class="title">Game 104</span></a>`;
   const mock = async url => {
     const u = new URL(url);
-    if (u.pathname.includes('/appreviews/')) return Response.json({success: 1, query_summary: {total_reviews: 1000, total_positive: 900}});
+    if (u.pathname.includes('/GetAppReviews/')) return Response.json({response:{query_summary:{total_reviews: 1000, total_positive: 900}}});
     if (u.pathname.includes('/search/')) return Response.json({success: 1, results_html: rows});
     const id = +u.searchParams.get('appids');
     return Response.json({[id]: {success: true, data: {type: 'game', name: `Game ${id}`, release_date: {coming_soon: false, date: '2025'}, is_free: true, short_description: 'x'}}});

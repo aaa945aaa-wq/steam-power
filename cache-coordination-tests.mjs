@@ -1,3 +1,4 @@
+import {reviewUrl} from './lib/review-policy.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
@@ -7,9 +8,9 @@ import {createPolicy} from './lib/request-policy.mjs';
 import {jsonGet,enrich,CACHE_INFO} from './lib/steam-metadata.mjs';
 import {fault,errorResponse} from './lib/api-errors.mjs';
 import {freshnessTracker} from './lib/cache-freshness.mjs';
-const root='https://store.steampowered.com/',search=root+'search/results/?tags=1',review=root+'appreviews/1';
+const root='https://store.steampowered.com/',search=root+'search/results/?tags=1',review=String(reviewUrl(1));
 function fixture(){const sql=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sql.exec(readFileSync('drizzle/'+f,'utf8'));const db={prepare(q){const s=sql.prepare(q);return {bind(...args){return {async first(){return s.get(...args)},async all(){return {results:s.all(...args)}},async run(){return {meta:{changes:s.run(...args).changes}}}}}}},async batch(xs){sql.exec('BEGIN');try{const out=[];for(const x of xs)out.push(await x.run());sql.exec('COMMIT');return out}catch(e){sql.exec('ROLLBACK');throw e}}};return {db,sql};}
-function seed(sql,url,t,age,body={old:true}){sql.prepare('INSERT INTO api_cache(cache_key,kind,body,fetched_at,expires_at) VALUES(?,?,?,?,?)').run('upstream-v1:'+url,url.includes('appreviews')?'reviews':'search',JSON.stringify(body),t-age,t-1);}
+function seed(sql,url,t,age,body={old:true}){sql.prepare('INSERT INTO api_cache(cache_key,kind,body,fetched_at,expires_at) VALUES(?,?,?,?,?)').run('upstream-v1:'+url,url.includes('GetAppReviews')?'reviews':'search',JSON.stringify(body),t-age,t-1);}
 const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve}};
 const tick=()=>new Promise(r=>setImmediate(r));
 
@@ -35,4 +36,4 @@ test('different search parameters never coalesce into one payload',async()=>{con
 test('migration preserves populated old cache and constant defaults',()=>{const sql=new DatabaseSync(':memory:');sql.exec(readFileSync('drizzle/0000_condemned_the_captain.sql','utf8'));sql.prepare('INSERT INTO api_cache(cache_key,kind,body,fetched_at,expires_at) VALUES(?,?,?,?,?)').run('existing','search','{}',10,20);sql.exec(readFileSync('drizzle/0001_polite_expediter.sql','utf8'));const r=sql.prepare('SELECT * FROM api_cache').get();assert.equal(r.expires_at,20);assert.equal(r.body,'{}');assert.equal(r.failure_count,0);assert.equal(r.error_source,null);sql.close();});
 test('expired stale imported features do not reach recommendation metadata',async()=>{const {mergeMetadata}=await import('./lib/steam-metadata.mjs');const extra={appid:999999999,name:'Old',facets:{mechanics:['cards'],presentation:[]},stale:true,checkedAt:Date.now()-86400001};assert.equal(mergeMetadata([extra]).some(g=>g.appid===extra.appid),false);});
 test('updating propagates through discovery without being mislabeled a Steam outage',async()=>{const {discover}=await import('./lib/discovery.mjs');await assert.rejects(discover({owned:[646570],library:[],answers:{646570:{rating:'like',reasons:[]}}},async u=>{if(String(u).includes('tagdata'))return Response.json([]);throw Object.assign(fault('updating',2),{managed:true})}),e=>e.code==='updating');});
-test('cleanup retains another review response still in its 72-hour grace window',async()=>{const {db,sql}=fixture();const t=500000000;seed(sql,review,t,60*3600000,{success:1,query_summary:{total_reviews:10}});sql.prepare('UPDATE api_cache SET expires_at=?').run(t-36*3600000);await sharedFetch(db,async()=>Response.json({ok:1}),{now:()=>t})(search);assert.ok(sql.prepare('SELECT body FROM api_cache WHERE cache_key=?').get('upstream-v1:'+review));});
+test('cleanup retains another review response still in its 72-hour grace window',async()=>{const {db,sql}=fixture();const t=500000000;seed(sql,review,t,60*3600000,{response:{query_summary:{total_reviews:10,total_positive:3}}});sql.prepare('UPDATE api_cache SET expires_at=?').run(t-36*3600000);await sharedFetch(db,async()=>Response.json({ok:1}),{now:()=>t})(search);assert.ok(sql.prepare('SELECT body FROM api_cache WHERE cache_key=?').get('upstream-v1:'+review));});
