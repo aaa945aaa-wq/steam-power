@@ -22,7 +22,7 @@ export function signals(answers,catalog,library=[],threshold=6,feedback={}){
   add(t,v,`行為樣本 ${n} 款：未啟動 ${s.zero}／短暫 ${s.short}／中度 ${s.mid}／投入 ${s.long}（${s.baselineSamples} 款有可信時數基準）`);
   behavior.push({tag:t,...s,value:v});
  }
- for(const f of Object.values(feedback).slice(-200)){if(!['interested','not_for_me'].includes(f.choice))continue;const fs=(f.features||[]).filter(t=>typeof t==='string').slice(0,12);if(f.choice==='interested')for(const t of fs)add(t,.12,'候選作品：表示有興趣（尚非遊玩體驗）');if(f.choice==='not_for_me'&&f.reason==='content'){const aspect=typeof f.aspect==='string'&&Object.hasOwn(FEATURE_LABELS,f.aspect)?f.aspect:null;for(const t of aspect?[aspect]:fs)add(t,-.18,aspect?'候選作品：指定玩法不合（弱修正）':'候選作品：玩法不合（弱修正）');}}
+ for(const f of Object.values(feedback).slice(-200)){if(!['interested','not_for_me'].includes(f.choice))continue;const fs=(f.features||[]).filter(t=>typeof t==='string'&&Object.hasOwn(FEATURE_LABELS,t)).slice(0,12);if(f.choice==='interested')for(const t of fs)add(t,.12,'候選作品：表示有興趣（尚非遊玩體驗）');if(f.choice==='not_for_me'&&f.reason==='content'){const aspect=typeof f.aspect==='string'&&Object.hasOwn(FEATURE_LABELS,f.aspect)?f.aspect:null;for(const t of aspect?[aspect]:fs)add(t,-.18,aspect?'候選作品：指定玩法不合（弱修正）':'候選作品：玩法不合（弱修正）');}}
  return {weights,evidence,behavior,attraction:attraction(answers,catalog,library,feedback),coverage:library.filter(g=>catalog.some(c=>c.appid===g.appid)).length};
 }
 export function predict(game,answers,catalog,library=[],threshold=6){
