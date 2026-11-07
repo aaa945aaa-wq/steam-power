@@ -44,7 +44,7 @@ const mock=async url=>{
  const u=new URL(url);
  if(u.pathname.includes('tagdata'))return Response.json([{tagid:9,name:'Strategy'}]);
  if(u.pathname.includes('/search/'))return Response.json({success:1,results_html:ids.map(id=>`<a data-ds-appid="${id}" data-ds-tagids="[9]"><span class="title">Game ${id}</span></a>`).join('')});
- if(u.pathname.includes('appreviews')){const count=counts[ids.indexOf(Number(u.pathname.split('/').pop()))];return Response.json({success:1,query_summary:{total_reviews:count,total_positive:count===null?null:Math.ceil(count*.2)}},{headers:{'X-Cache-State':'stale','X-Cache-Fetched-At':String(Date.now()-1000)}});}
+ if(u.pathname.includes('GetAppReviews')){const count=counts[ids.indexOf(Number(JSON.parse(u.searchParams.get('input_json')).appid))];return Response.json({response:{query_summary:{total_reviews:count,total_positive:count===null?null:Math.ceil(count*.2)}}},{headers:{'X-Cache-State':'stale','X-Cache-Fetched-At':String(Date.now()-1000)}});}
  const id=u.searchParams.get('appids');return Response.json({[id]:{success:true,data:{type:'game',name:'Game '+id,release_date:{coming_soon:false},is_free:true}}});
 };
 test('full discovery excludes insufficient/unknown reviews and accepts grace-cache valid counts',async()=>{
@@ -57,7 +57,7 @@ test('full discovery excludes insufficient/unknown reviews and accepts grace-cac
 });
 test('review-stage infrastructure failures keep original retry semantics',async()=>{
  for(const code of ['database','updating','interrupted','rate_limit'])await assert.rejects(discover({owned:[],answers},async url=>{
-  if(String(url).includes('/appreviews/'))throw Object.assign(Error(code),{code,retryAfter:90,managed:true});
+  if(String(url).includes('/GetAppReviews/'))throw Object.assign(Error(code),{code,retryAfter:90,managed:true});
   return mock(url);
  }),e=>e.code===code&&e.retryAfter===90);
 });
@@ -69,12 +69,23 @@ test('exploration never relaxes the existing fit threshold',()=>{
 test('full discovery rejects low or unknown positive rates including grace-cache responses',async()=>{
  for(const summary of [{total_reviews:20,total_positive:3},{total_reviews:20}]){
   const result=await discover({owned:[],answers},async url=>{
-   if(!String(url).includes('/appreviews/'))return mock(url);
-   const u=new URL(url);assert.equal(u.searchParams.get('language'),'all');assert.equal(u.searchParams.get('purchase_type'),'all');
-   return Response.json({success:1,query_summary:summary},{headers:{'X-Cache-State':'stale','X-Cache-Fetched-At':String(Date.now()-1000)}});
+   if(!String(url).includes('/GetAppReviews/'))return mock(url);
+   const u=new URL(url);const filters=JSON.parse(u.searchParams.get('input_json'));assert.equal(filters.review_type,0);assert.equal(filters.purchase_type,1);assert.equal(filters.languages,undefined);
+   return Response.json({response:{query_summary:summary}},{headers:{'X-Cache-State':'stale','X-Cache-Fetched-At':String(Date.now()-1000)}});
   });
   assert.equal(result.games.length,0);
   assert.ok(result.warnings.some(w=>w.includes(summary.total_positive===undefined?'無法確認':'好評率低於 20%')));
   assert.ok(!result.warnings.some(w=>w.includes('未滿 20')));
  }
+});
+
+test('a malformed review leaves verified candidates available',async()=>{
+ const result=await discover({owned:[],answers},async url=>{
+  const u=new URL(url);
+  if(u.pathname.includes('/GetAppReviews/')&&JSON.parse(u.searchParams.get('input_json')).appid===803)
+   return new Response('<html>unavailable</html>');
+  return mock(url);
+ });
+ assert.ok(result.games.some(g=>g.appid===804));
+ assert.ok(result.games.every(g=>g.appid!==803));
 });
